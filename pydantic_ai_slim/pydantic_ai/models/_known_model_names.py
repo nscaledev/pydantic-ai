@@ -605,6 +605,7 @@ KnownModelName = TypeAliasType(
         'openai:o4-mini-2025-04-16',
         'openai:o4-mini-deep-research',
         'openai:o4-mini-deep-research-2025-06-26',
+        'nscale:openai/gpt-oss-20b',
         'test',
         'snowflake:claude-4-sonnet',
         'snowflake:claude-fable-5',

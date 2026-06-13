@@ -130,6 +130,8 @@ OpenAIChatCompatibleProvider = TypeAliasType(
         'deepseek',
         'fireworks',
         'github',
+        'grok',
+        'nscale',
         'heroku',
         'litellm',
         'moonshotai',
@@ -1644,6 +1646,10 @@ def infer_model(  # noqa: C901
         return HuggingFaceModel(model_name, provider=provider)
     elif model_kind == 'xai':
         from .xai import XaiModel
+
+        return XaiModel(model_name, provider=provider)
+    elif model_kind == 'nscale':
+        from .nscale import XaiModel
 
         return XaiModel(model_name, provider=provider)
     else:
