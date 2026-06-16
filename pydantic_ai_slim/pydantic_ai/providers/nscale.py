@@ -8,8 +8,11 @@ import httpx
 from pydantic_ai import ModelProfile
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import create_async_http_client
+from pydantic_ai.profiles.deepseek import deepseek_model_profile
 from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
 from pydantic_ai.profiles.openai import openai_model_profile
+from pydantic_ai.profiles.meta import meta_model_profile
+from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.providers import Provider
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
 
@@ -44,7 +47,10 @@ class NscaleProvider(Provider[AsyncOpenAI]):
     def model_profile(model_name: str) -> ModelProfile | None:
         provider_to_profile = {
             'openai': openai_model_profile,
-            'moonshortai': moonshotai_model_profile,
+            'moonshotai': moonshotai_model_profile,
+            'Qwen': qwen_model_profile,
+            'deepseek-ai': deepseek_model_profile,
+            'meta-llama': meta_model_profile
         }
         profile: ModelProfile | None = None
 
@@ -62,6 +68,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
         return OpenAIModelProfile(
             json_schema_transformer=OpenAIJsonSchemaTransformer,
             openai_supports_tool_choice_required=False,
+
         ).update(profile)
 
     def __init__(
