@@ -82,7 +82,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             Args:
 
         Args:
-            api_key: SambaNova API key. If not provided, reads from NSCALE_SERVICE_TOKEN env var.
+            service_token: Scale service Token. If not provided, reads from NSCALE_SERVICE_TOKEN env var.
             base_url: Custom API base URL. Defaults to https://inference.api.nscale.com/v1
             openai_client: Optional pre-configured OpenAI client
             http_client: Optional custom httpx.AsyncClient for making HTTP requests
