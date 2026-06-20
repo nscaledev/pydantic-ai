@@ -16,7 +16,7 @@
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20251004.0",
 		"@typescript/native-preview": "^7.0.0-dev.20251006.1",
-		"wrangler": "^4.59.1"
+		"wrangler": "^4.103.0"
 	},
 	"overrides": {
 		"protobufjs": "^7.5.8",
