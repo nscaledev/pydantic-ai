@@ -1148,10 +1148,7 @@ def infer_model(  # noqa: C901
         from .xai import XaiModel
 
         return XaiModel(model_name, provider=provider)
-    elif model_kind == 'nscale':
-        from .nscale import XaiModel
 
-        return XaiModel(model_name, provider=provider)
     else:
         raise UserError(f'Unknown model: {model}')  # pragma: no cover
 
