@@ -181,6 +181,7 @@ Need deterministic, fast tests?
 | Hugging Face | `huggingface:` | `huggingface:meta-llama/Llama-3.3-70B-Instruct` |
 | Cerebras | `cerebras:` | `cerebras:llama-4-scout-17b-16e-instruct` |
 | Heroku | `heroku:` | `heroku:claude-sonnet-4-6` |
+| Nscale | `nscale` | `nscale:Qwen/Qwen3-32B`
 
 **Additional prefixes:** `litellm:`, `nebius:`, `ovhcloud:`, `alibaba:`, `sambanova:`, `vercel:`, `outlines:`, `moonshotai:`. For truly custom providers, subclass `Model` or use `OpenAIChatModel` with a custom `base_url`.
 
