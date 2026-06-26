@@ -13,6 +13,7 @@ from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
 from pydantic_ai.profiles.openai import openai_model_profile
 from pydantic_ai.profiles.meta import meta_model_profile
 from pydantic_ai.profiles.qwen import qwen_model_profile
+from pydantic_ai.profiles.mistral import mistral_model_profile
 from pydantic_ai.providers import Provider
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
 
@@ -30,6 +31,19 @@ class NscaleProvider(Provider[AsyncOpenAI]):
     NScale Models provides access to various AI models through an OpenAI-compatible API.
     See <https://docs.nscale.com/docs/ai-services/models> for more information.
     """
+
+    @overload
+    def __init__(self) -> None: ...
+
+    @overload
+    def __init__(self, *, api_key: str) -> None: ...
+
+    @overload
+    def __init__(self, *, api_key: str, http_client: httpx.AsyncClient) -> None: ...
+
+    @overload
+    def __init__(self, *, openai_client: AsyncOpenAI | None = None) -> None: ...
+
 
     @property
     def name(self) -> str:
@@ -50,14 +64,18 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'moonshotai': moonshotai_model_profile,
             'Qwen': qwen_model_profile,
             'deepseek-ai': deepseek_model_profile,
-            'meta-llama': meta_model_profile
+            'meta-llama': meta_model_profile,
+            'mistralai': mistral_model_profile,
         }
         profile: ModelProfile | None = None
 
         provider, model_name = model_name.removeprefix('~').split('/', 1)
+        
 
         if provider in provider_to_profile:
             model_name, *_ = model_name.split(':', 1)
+        else:
+            return
         profile = provider_to_profile[provider](model_name)
 
         for prefix, profile_func in provider_to_profile.items():
@@ -65,11 +83,21 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 profile = profile_func(model_name)
                 break
 
-        return OpenAIModelProfile(
-            json_schema_transformer=OpenAIJsonSchemaTransformer,
-            openai_supports_tool_choice_required=False,
+        if provider in ('deepseek-ai', 'mistralai', 'Qwen'):
+            nscale_profile = OpenAIModelProfile(
+                json_schema_transformer=OpenAIJsonSchemaTransformer,
+                openai_supports_tool_choice_required=False,
+                supports_tools=False,
+                default_structured_output_mode='prompted',
+            )
+        else:
+            nscale_profile = OpenAIModelProfile(
+                json_schema_transformer=OpenAIJsonSchemaTransformer,
+                openai_supports_tool_choice_required=False,
+            )                    
 
-        ).update(profile)
+        return nscale_profile.update(profile)
+    
 
     def __init__(
         self,
@@ -110,8 +138,6 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 self._own_http_client = http_client
                 self._http_client_factory = create_async_http_client
             self._client = AsyncOpenAI(base_url=self._base_url, api_key=service_token, http_client=http_client)
-        
-
 
     def _set_http_client(self, http_client: httpx.AsyncClient) -> None:
         self._client._client = http_client  # pyright: ignore[reportPrivateUsage]
