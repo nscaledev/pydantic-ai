@@ -51,7 +51,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
 
     @property
     def base_url(self) -> str:
-        return 'https://inference.api.nscale.com/v1'
+        return self._base_url
 
     @property
     def client(self) -> AsyncOpenAI:
@@ -66,6 +66,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'deepseek-ai': deepseek_model_profile,
             'meta-llama': meta_model_profile,
             'mistralai': mistral_model_profile,
+            'glm': openai_model_profile,
         }
         profile: ModelProfile | None = None
 
@@ -83,7 +84,15 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 profile = profile_func(model_name)
                 break
 
-        if provider in ('deepseek-ai', 'mistralai', 'Qwen'):
+        if provider == 'glm':
+            nscale_profile = OpenAIModelProfile(
+                json_schema_transformer=OpenAIJsonSchemaTransformer,
+                supports_thinking=True,
+                thinking_always_enabled=True,
+                openai_chat_thinking_field='reasoning_content',
+                openai_chat_send_back_thinking_parts='auto',
+            )
+        elif provider in ('deepseek-ai', 'mistralai', 'Qwen'):
             nscale_profile = OpenAIModelProfile(
                 json_schema_transformer=OpenAIJsonSchemaTransformer,
                 openai_supports_tool_choice_required=False,
