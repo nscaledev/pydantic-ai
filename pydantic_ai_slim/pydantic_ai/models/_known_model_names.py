@@ -634,6 +634,7 @@ KnownModelName = TypeAliasType(
         'nscale:Qwen/Qwen3-14B',
         'nscale:Qwen/Qwen3-32B',
         'nscale:mistralai/Devstral-Small-2505',
+        'nscale:glm/glm-5.2-fp8',
         'nscale:deepseek-ai/DeepSeek-R1-Distill-Llama-8B',
         'nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
         'nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-14B',
