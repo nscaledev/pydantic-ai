@@ -66,6 +66,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'deepseek-ai': deepseek_model_profile,
             'meta-llama': meta_model_profile,
             'mistralai': mistral_model_profile,
+            'nvidia': openai_model_profile,
             'glm': openai_model_profile,
         }
         profile: ModelProfile | None = None
@@ -78,6 +79,35 @@ class NscaleProvider(Provider[AsyncOpenAI]):
         else:
             return
         profile = provider_to_profile[provider](model_name)
+        is_gpt_oss = provider == 'openai' and model_name.startswith('gpt-oss')
+        qwen3_always_reasoning_models = {
+            'Qwen3-235B-A22B',
+            'Qwen3-8B',
+            'Qwen3-14B',
+            'Qwen3-32B',
+        }
+        is_qwen3_always_reasoning = provider == 'Qwen' and model_name in qwen3_always_reasoning_models
+        is_deepseek_r1 = provider == 'deepseek-ai' and model_name.startswith('DeepSeek-R1')
+        deepseek_r1_always_reasoning_models = {
+            'DeepSeek-R1-Distill-Qwen-7B',
+            'DeepSeek-R1-Distill-Qwen-14B',
+        }
+        is_deepseek_r1_always_reasoning = provider == 'deepseek-ai' and model_name in deepseek_r1_always_reasoning_models
+        is_kimi_reasoning = provider == 'moonshotai' and model_name == 'Kimi-K2.5'
+        is_nvidia_reasoning = provider == 'nvidia'
+        supports_thinking = (
+            is_gpt_oss
+            or is_qwen3_always_reasoning
+            or is_deepseek_r1
+            or is_kimi_reasoning
+            or is_nvidia_reasoning
+        )
+        thinking_always_enabled = (
+            is_gpt_oss
+            or is_qwen3_always_reasoning
+            or is_deepseek_r1_always_reasoning
+            or is_nvidia_reasoning
+        )
 
         for prefix, profile_func in provider_to_profile.items():
             if model_name.startswith(prefix):
@@ -88,7 +118,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             nscale_profile = OpenAIModelProfile(
                 json_schema_transformer=OpenAIJsonSchemaTransformer,
                 supports_thinking=True,
-                thinking_always_enabled=True,
+                thinking_always_enabled=False,
                 openai_chat_thinking_field='reasoning_content',
                 openai_chat_send_back_thinking_parts='auto',
             )
@@ -98,11 +128,15 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 openai_supports_tool_choice_required=False,
                 supports_tools=False,
                 default_structured_output_mode='prompted',
+                supports_thinking=supports_thinking,
+                thinking_always_enabled=thinking_always_enabled,
             )
         else:
             nscale_profile = OpenAIModelProfile(
                 json_schema_transformer=OpenAIJsonSchemaTransformer,
                 openai_supports_tool_choice_required=False,
+                supports_thinking=supports_thinking,
+                thinking_always_enabled=thinking_always_enabled,
             )                    
 
         return nscale_profile.update(profile)
