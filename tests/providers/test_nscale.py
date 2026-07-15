@@ -130,9 +130,10 @@ def test_nscale_devstral_profile_does_not_support_thinking():
     assert profile.thinking_always_enabled is False
 
 
-def test_nscale_glm_model_profile():
+@pytest.mark.parametrize('model_name', ['glm-5.2-fp8', 'zai-org/GLM-5.2'])
+def test_nscale_glm_model_profile(model_name: str):
     """Nscale-hosted GLM returns native reasoning, and `reasoning_effort='none'` disables it."""
-    profile = NscaleProvider.model_profile('glm/glm-5.2-fp8')
+    profile = NscaleProvider.model_profile(model_name)
     assert isinstance(profile, OpenAIModelProfile)
     assert profile.json_schema_transformer == OpenAIJsonSchemaTransformer
     assert profile.supports_thinking is True
@@ -143,10 +144,11 @@ def test_nscale_glm_model_profile():
 
 def test_nscale_glm_model_inference(env: TestEnv):
     env.set('NSCALE_SERVICE_TOKEN', 'env-token')
-    model = infer_model('nscale:glm/glm-5.2-fp8')
+    model = infer_model('nscale:glm-5.2-fp8')
     assert isinstance(model, OpenAIChatModel)
-    assert model.model_name == 'glm/glm-5.2-fp8'
+    assert model.model_name == 'glm-5.2-fp8'
     assert model.base_url == 'https://inference.api.nscale.com/v1/'
+    assert model.profile.supports_thinking is True
 
 
 @pytest.mark.anyio
@@ -163,7 +165,7 @@ async def test_nscale_glm_reasoning_content(allow_model_requests: None):
     model = OpenAIChatModel(
         'glm-5.2-fp8',
         provider=NscaleProvider(openai_client=mock_client),
-        profile=NscaleProvider.model_profile('glm/glm-5.2-fp8'),
+        profile=NscaleProvider.model_profile('glm-5.2-fp8'),
     )
 
     response = await model.request(
@@ -186,7 +188,7 @@ async def test_nscale_glm_sends_required_tool_choice(allow_model_requests: None)
     model = OpenAIChatModel(
         'glm-5.2-fp8',
         provider=NscaleProvider(openai_client=mock_client),
-        profile=NscaleProvider.model_profile('glm/glm-5.2-fp8'),
+        profile=NscaleProvider.model_profile('glm-5.2-fp8'),
     )
 
     await model.request(
@@ -209,7 +211,7 @@ def test_nscale_glm_thinking_round_trip_mapping():
                 completion_message(ChatCompletionMessage.model_construct(content='', role='assistant'))
             )
         ),
-        profile=NscaleProvider.model_profile('glm/glm-5.2-fp8'),
+        profile=NscaleProvider.model_profile('glm-5.2-fp8'),
     )
     mapped = model._map_model_response(  # type: ignore[reportPrivateUsage]
         ModelResponse(
