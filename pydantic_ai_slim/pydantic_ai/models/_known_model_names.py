@@ -534,7 +534,7 @@ KnownModelName = TypeAliasType(
         'nscale:mistralai/Devstral-Small-2505',
         'nscale:mistralai/mixtral-8x22b-instruct-v0.1',
         'nscale:nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16',
-        'nscale:glm/glm-5.2-fp8',
+        'nscale:glm-5.2-fp8',
         'test',
     ],
 )

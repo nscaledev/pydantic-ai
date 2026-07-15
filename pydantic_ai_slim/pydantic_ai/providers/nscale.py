@@ -67,12 +67,17 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'meta-llama': meta_model_profile,
             'mistralai': mistral_model_profile,
             'nvidia': openai_model_profile,
-            'glm': openai_model_profile,
+            'zai-org': openai_model_profile,
         }
         profile: ModelProfile | None = None
 
-        provider, model_name = model_name.removeprefix('~').split('/', 1)
-        
+        model_name = model_name.removeprefix('~')
+        if '/' in model_name:
+            provider, model_name = model_name.split('/', 1)
+        elif model_name.startswith('glm-'):
+            provider = 'zai-org'
+        else:
+            return None
 
         if provider in provider_to_profile:
             model_name, *_ = model_name.split(':', 1)
@@ -114,7 +119,7 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 profile = profile_func(model_name)
                 break
 
-        if provider == 'glm':
+        if provider == 'zai-org':
             nscale_profile = OpenAIModelProfile(
                 json_schema_transformer=OpenAIJsonSchemaTransformer,
                 supports_thinking=True,
