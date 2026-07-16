@@ -173,6 +173,7 @@ def test_list_models(capfd: CaptureFixture[str]):
         'gateway/',
         'heroku',
         'moonshotai',
+        'nscale',
         'grok',
         'xai',
         'huggingface',

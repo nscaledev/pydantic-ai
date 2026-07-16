@@ -25,13 +25,14 @@ with try_import() as imports_successful:
     from pydantic_ai.providers.deepseek import DeepSeekModelName
     from pydantic_ai.providers.grok import GrokModelName
     from pydantic_ai.providers.moonshotai import MoonshotAIModelName
+    from pydantic_ai.providers.nscale import NscaleModelName
 
 if not imports_successful():  # pragma: lax no cover
     # Define placeholders so the module can be loaded for test collection
     AnthropicModelName = BedrockModelName = CohereModelName = GoogleModelName = None
     GroqModelName = HuggingFaceModelName = MistralModelName = OpenAIModelName = None
     DEPRECATED_OPENAI_MODELS: frozenset[str] = frozenset()  # pyright: ignore[reportConstantRedefinition]
-    DeepSeekModelName = GrokModelName = XaiModelName = MoonshotAIModelName = None
+    DeepSeekModelName = GrokModelName = XaiModelName = MoonshotAIModelName = NscaleModelName = None
 
 pytestmark = [
     pytest.mark.skipif(not imports_successful(), reason='some model package was not installed'),
@@ -72,6 +73,7 @@ _PROVIDER_TO_MODEL_NAMES = {
     'huggingface': HuggingFaceModelName,
     'mistral': MistralModelName,
     'moonshotai': MoonshotAIModelName,
+    'nscale': NscaleModelName,
     'openai': OpenAIModelName,
     'openai-chat': OpenAIModelName,
 }

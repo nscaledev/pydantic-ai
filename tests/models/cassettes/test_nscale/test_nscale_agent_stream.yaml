@@ -1,0 +1,68 @@
+interactions:
+- request:
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br
+      connection:
+      - keep-alive
+      content-length:
+      - '205'
+      content-type:
+      - application/json
+      host:
+      - inference.api.nscale.com
+    method: POST
+    parsed_body:
+      messages:
+      - content: What is the capital of France? Answer in one sentence.
+        role: user
+      model: meta-llama/Llama-3.1-8B-Instruct
+      stream: true
+      stream_options:
+        include_usage: true
+    uri: https://inference.api.nscale.com/v1/chat/completions
+  response:
+    body:
+      string: |+
+        data: {"choices":[{"delta":{"content":"","role":"assistant"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":"The"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":" capital"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":" of"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":" France"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":" is"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":" Paris"},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":"."},"finish_reason":null,"index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[{"delta":{"content":""},"finish_reason":"stop","index":0,"stop_reason":null}],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","usage":null}
+
+        data: {"choices":[],"created":1784187754,"id":"chatcmpl-353542fc-701b-4195-ae12-7698696dd287","model":"meta-llama/Llama-3.1-8B-Instruct","object":"chat.completion.chunk","system_fingerprint":"vllm-0.21.0-dbb32ef8","usage":{"completion_tokens":8,"prompt_tokens":47,"prompt_tokens_details":null,"total_tokens":55}}
+
+        data: [DONE]
+
+    headers:
+      cache-control:
+      - no-cache
+      connection:
+      - keep-alive
+      content-type:
+      - text/event-stream
+      inference-id:
+      - b20e0883-915f-4dc3-a3f2-9dc18ca1153b
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+      transfer-encoding:
+      - chunked
+    status:
+      code: 200
+      message: OK
+version: 1
+...

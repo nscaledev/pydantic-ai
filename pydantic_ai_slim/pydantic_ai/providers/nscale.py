@@ -1,7 +1,7 @@
 from __future__ import annotations as _annotations
 
 import os
-from typing import overload
+from typing import Literal, overload
 
 import httpx
 
@@ -9,13 +9,12 @@ from pydantic_ai import ModelProfile
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import create_async_http_client
 from pydantic_ai.profiles.deepseek import deepseek_model_profile
-from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
-from pydantic_ai.profiles.openai import openai_model_profile
 from pydantic_ai.profiles.meta import meta_model_profile
-from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.profiles.mistral import mistral_model_profile
+from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
+from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
+from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.providers import Provider
-from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
 
 try:
     from openai import AsyncOpenAI
@@ -25,6 +24,33 @@ except ImportError as _import_error:  # pragma: no cover
         'you can use the `openai` optional group — `pip install "pydantic-ai-slim[openai]"`'
     ) from _import_error
 
+
+NscaleModelName = Literal[
+    'moonshotai/Kimi-K2.5',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'Qwen/Qwen3-235B-A22B',
+    'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    'Qwen/Qwen3-4B-Thinking-2507',
+    'Qwen/Qwen3-4B-Instruct-2507',
+    'Qwen/Qwen3-8B',
+    'Qwen/Qwen3-14B',
+    'Qwen/Qwen3-32B',
+    'Qwen/Qwen2.5-Coder-3B-Instruct',
+    'Qwen/Qwen2.5-Coder-7B-Instruct',
+    'Qwen/Qwen2.5-Coder-32B-Instruct',
+    'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+    'meta-llama/Llama-3.1-8B-Instruct',
+    'deepseek-ai/DeepSeek-R1-Distill-Llama-8B',
+    'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
+    'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B',
+    'mistralai/Devstral-Small-2505',
+    'mistralai/mixtral-8x22b-instruct-v0.1',
+    'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16',
+    'glm-5.2-fp8',
+]
+
+
 class NscaleProvider(Provider[AsyncOpenAI]):
     """Provider for NScale Models API.
 
@@ -33,17 +59,17 @@ class NscaleProvider(Provider[AsyncOpenAI]):
     """
 
     @overload
-    def __init__(self) -> None: ...
+    def __init__(self, *, openai_client: AsyncOpenAI) -> None: ...
 
     @overload
-    def __init__(self, *, api_key: str) -> None: ...
-
-    @overload
-    def __init__(self, *, api_key: str, http_client: httpx.AsyncClient) -> None: ...
-
-    @overload
-    def __init__(self, *, openai_client: AsyncOpenAI | None = None) -> None: ...
-
+    def __init__(
+        self,
+        *,
+        service_token: str | None = None,
+        base_url: str | None = None,
+        openai_client: None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None: ...
 
     @property
     def name(self) -> str:
@@ -97,21 +123,16 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'DeepSeek-R1-Distill-Qwen-7B',
             'DeepSeek-R1-Distill-Qwen-14B',
         }
-        is_deepseek_r1_always_reasoning = provider == 'deepseek-ai' and model_name in deepseek_r1_always_reasoning_models
+        is_deepseek_r1_always_reasoning = (
+            provider == 'deepseek-ai' and model_name in deepseek_r1_always_reasoning_models
+        )
         is_kimi_reasoning = provider == 'moonshotai' and model_name == 'Kimi-K2.5'
         is_nvidia_reasoning = provider == 'nvidia'
         supports_thinking = (
-            is_gpt_oss
-            or is_qwen3_always_reasoning
-            or is_deepseek_r1
-            or is_kimi_reasoning
-            or is_nvidia_reasoning
+            is_gpt_oss or is_qwen3_always_reasoning or is_deepseek_r1 or is_kimi_reasoning or is_nvidia_reasoning
         )
         thinking_always_enabled = (
-            is_gpt_oss
-            or is_qwen3_always_reasoning
-            or is_deepseek_r1_always_reasoning
-            or is_nvidia_reasoning
+            is_gpt_oss or is_qwen3_always_reasoning or is_deepseek_r1_always_reasoning or is_nvidia_reasoning
         )
 
         for prefix, profile_func in provider_to_profile.items():
@@ -142,20 +163,18 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 openai_supports_tool_choice_required=False,
                 supports_thinking=supports_thinking,
                 thinking_always_enabled=thinking_always_enabled,
-            )                    
+            )
 
         return nscale_profile.update(profile)
-    
 
     def __init__(
         self,
-        base_url: str | None =None,
+        base_url: str | None = None,
         service_token: str | None = None,
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         """Initialize Nscale provider.
-            Args:
 
         Args:
             service_token: Scale service Token. If not provided, reads from NSCALE_SERVICE_TOKEN env var.

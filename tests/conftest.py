@@ -707,6 +707,11 @@ def openrouter_api_key() -> str:
 
 
 @pytest.fixture(scope='session')
+def nscale_service_token() -> str:
+    return os.getenv('NSCALE_SERVICE_TOKEN', 'mock-api-key')
+
+
+@pytest.fixture(scope='session')
 def ollama_api_key() -> str:
     return os.getenv('OLLAMA_API_KEY', 'mock-api-key')
 

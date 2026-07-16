@@ -1,5 +1,3 @@
-
-import httpx
 import pytest
 
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ThinkingPart, UserPromptPart
@@ -12,7 +10,6 @@ from ..conftest import TestEnv, try_import
 from ..models.mock_openai import MockOpenAI, completion_message, get_mock_chat_completion_kwargs
 
 with try_import() as imports_successful:
-    from openai import OpenAIError
     from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
     from pydantic_ai.models.openai import OpenAIChatModel

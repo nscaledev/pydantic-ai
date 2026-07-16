@@ -1,0 +1,59 @@
+interactions:
+- request:
+    headers:
+      accept:
+      - application/json
+      accept-encoding:
+      - gzip, deflate, br
+      connection:
+      - keep-alive
+      content-length:
+      - '163'
+      content-type:
+      - application/json
+      host:
+      - inference.api.nscale.com
+    method: POST
+    parsed_body:
+      messages:
+      - content: What is the capital of France? Answer in one sentence.
+        role: user
+      model: meta-llama/Llama-3.1-8B-Instruct
+      stream: false
+    uri: https://inference.api.nscale.com/v1/chat/completions
+  response:
+    headers:
+      connection:
+      - keep-alive
+      content-length:
+      - '501'
+      content-type:
+      - application/json; charset=utf-8
+      inference-id:
+      - 57d3342c-71ec-464a-a0c0-ae34ffbfa9e6
+      strict-transport-security:
+      - max-age=31536000; includeSubDomains
+    parsed_body:
+      choices:
+      - finish_reason: stop
+        index: 0
+        message:
+          content: The capital of France is Paris.
+          role: assistant
+          tool_calls: []
+        stop_reason: null
+      created: 1784187753
+      id: chatcmpl-771279ac-e9b9-436b-bce6-c702c5fd79c8
+      model: meta-llama/Llama-3.1-8B-Instruct
+      object: chat.completion
+      prompt_logprobs: null
+      system_fingerprint: vllm-0.21.0-dbb32ef8
+      usage:
+        completion_tokens: 8
+        prompt_tokens: 47
+        prompt_tokens_details: null
+        total_tokens: 55
+    status:
+      code: 200
+      message: OK
+version: 1
