@@ -1,7 +1,6 @@
-
-import httpx
 import pytest
 
+from pydantic_ai.exceptions import UserError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ThinkingPart, UserPromptPart
 from pydantic_ai.models import ModelRequestParameters, infer_model
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
@@ -12,7 +11,6 @@ from ..conftest import TestEnv, try_import
 from ..models.mock_openai import MockOpenAI, completion_message, get_mock_chat_completion_kwargs
 
 with try_import() as imports_successful:
-    from openai import OpenAIError
     from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
     from pydantic_ai.models.openai import OpenAIChatModel
@@ -139,7 +137,7 @@ def test_nscale_glm_model_profile(model_name: str):
     assert profile.supports_thinking is True
     assert profile.thinking_always_enabled is False
     assert profile.openai_chat_thinking_field == 'reasoning_content'
-    assert profile.openai_supports_tool_choice_required is True
+    assert profile.openai_supports_tool_choice_required is False
 
 
 def test_nscale_glm_model_inference(env: TestEnv):
@@ -181,7 +179,8 @@ async def test_nscale_glm_reasoning_content(allow_model_requests: None):
 
 
 @pytest.mark.anyio
-async def test_nscale_glm_sends_required_tool_choice(allow_model_requests: None):
+async def test_nscale_glm_rejects_required_tool_choice(allow_model_requests: None):
+    """Nscale-hosted GLM rejects explicit forced tool choice."""
     mock_client = MockOpenAI.create_mock(
         completion_message(ChatCompletionMessage.model_construct(content='Done.', role='assistant'))
     )
@@ -191,16 +190,17 @@ async def test_nscale_glm_sends_required_tool_choice(allow_model_requests: None)
         profile=NscaleProvider.model_profile('glm-5.2-fp8'),
     )
 
-    await model.request(
-        messages=[ModelRequest(parts=[UserPromptPart(content='Use the tool')])],
-        model_settings=ModelSettings(tool_choice='required'),
-        model_request_parameters=ModelRequestParameters(
-            function_tools=[ToolDefinition(name='lookup')],
-            allow_text_output=True,
-        ),
-    )
+    with pytest.raises(UserError, match="tool_choice='required' is not supported"):
+        await model.request(
+            messages=[ModelRequest(parts=[UserPromptPart(content='Use the tool')])],
+            model_settings=ModelSettings(tool_choice='required'),
+            model_request_parameters=ModelRequestParameters(
+                function_tools=[ToolDefinition(name='lookup')],
+                allow_text_output=True,
+            ),
+        )
 
-    assert get_mock_chat_completion_kwargs(mock_client)[0]['tool_choice'] == 'required'
+    assert get_mock_chat_completion_kwargs(mock_client) == []
 
 
 def test_nscale_glm_thinking_round_trip_mapping():
