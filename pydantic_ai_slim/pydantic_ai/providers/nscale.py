@@ -2,18 +2,15 @@ from __future__ import annotations as _annotations
 
 import os
 
-import httpx
-
 from pydantic_ai import ModelProfile
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.models import create_async_http_client
+from pydantic_ai.profiles import merge_profile
 from pydantic_ai.profiles.deepseek import deepseek_model_profile
 from pydantic_ai.profiles.meta import meta_model_profile
 from pydantic_ai.profiles.mistral import mistral_model_profile
 from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
 from pydantic_ai.profiles.qwen import qwen_model_profile
-from pydantic_ai.providers import Provider
 
 try:
     from openai import AsyncOpenAI
@@ -24,7 +21,13 @@ except ImportError as _import_error:  # pragma: no cover
     ) from _import_error
 
 
-class NscaleProvider(Provider[AsyncOpenAI]):
+from ._openai_compatible import (
+    AsyncHTTPClient as _OpenAIHTTPClient,
+    OpenAICompatibleProvider as _OpenAICompatibleProvider,
+)
+
+
+class NscaleProvider(_OpenAICompatibleProvider):
     """Provider for NScale Models API.
 
     NScale Models provides access to various AI models through an OpenAI-compatible API.
@@ -126,14 +129,14 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 thinking_always_enabled=thinking_always_enabled,
             )
 
-        return nscale_profile.update(profile)
+        return merge_profile(profile, nscale_profile)
 
     def __init__(
         self,
         base_url: str | None = None,
         service_token: str | None = None,
         openai_client: AsyncOpenAI | None = None,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: _OpenAIHTTPClient | None = None,
     ) -> None:
         """Initialize the Nscale provider."""
         if openai_client is not None:
@@ -151,11 +154,6 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             # Set base URL (default to NScale API endpoint)
             self._base_url = base_url or os.getenv('NSCALE_BASE_URL', 'https://inference.api.nscale.com/v1')
 
-            if http_client is None:
-                http_client = create_async_http_client()
-                self._own_http_client = http_client
-                self._http_client_factory = create_async_http_client
-            self._client = AsyncOpenAI(base_url=self._base_url, api_key=service_token, http_client=http_client)
-
-    def _set_http_client(self, http_client: httpx.AsyncClient) -> None:
-        self._client._client = http_client  # pyright: ignore[reportPrivateUsage]
+            self._client = self._create_openai_client(
+                base_url=self._base_url, api_key=service_token, http_client=http_client
+            )
