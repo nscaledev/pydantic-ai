@@ -6,20 +6,37 @@ The providers are in charge of providing an authenticated client to the API.
 from __future__ import annotations as _annotations
 
 import functools
-import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from types import TracebackType
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
 import anyio
-import httpx
 from typing_extensions import Self, TypeVar
 
-from .._warnings import PydanticAIDeprecationWarning
+from .._http import AsyncHTTPClient
+from ..exceptions import UserError
 from ..profiles import ModelProfile
 
+if TYPE_CHECKING:
+    from ..realtime import RealtimeModelProfile
+
 InterfaceClient = TypeVar('InterfaceClient', default=Any)
+
+_KEYLESS_HINT = (
+    "To try Pydantic AI without an API key, use the built-in test model: `Agent('test')`. "
+    'See https://ai.pydantic.dev/testing/'
+)
+
+
+def missing_api_key_error(message: str) -> UserError:
+    """Build a [`UserError`][pydantic_ai.exceptions.UserError] for missing provider credentials.
+
+    The provider-specific `message` (which environment variable to set or how to pass the key) is followed by a
+    hint pointing newcomers to the keyless [test model](https://ai.pydantic.dev/testing/), so a missing key never
+    dead-ends the getting-started experience.
+    """
+    return UserError(f'{message} {_KEYLESS_HINT}')
 
 
 class Provider(ABC, Generic[InterfaceClient]):
@@ -36,9 +53,10 @@ class Provider(ABC, Generic[InterfaceClient]):
     """
 
     _client: InterfaceClient
-    _own_http_client: httpx.AsyncClient | None = None
-    _http_client_factory: Callable[[], httpx.AsyncClient] | None = None
+    _own_http_client: AsyncHTTPClient | None = None
+    _http_client_factory: Callable[[], AsyncHTTPClient] | None = None
     _entered_count: int = 0
+    _model_id_namespace: str | None = None
 
     @functools.cached_property
     def _enter_lock(self) -> anyio.Lock:
@@ -60,6 +78,11 @@ class Provider(ABC, Generic[InterfaceClient]):
         raise NotImplementedError()
 
     @property
+    def model_id_namespace(self) -> str:
+        """The namespace used to fully qualify model IDs routed through this provider."""
+        return self._model_id_namespace or self.name
+
+    @property
     @abstractmethod
     def base_url(self) -> str:
         """The base URL for the provider API."""
@@ -76,7 +99,12 @@ class Provider(ABC, Generic[InterfaceClient]):
         """The model profile for the named model, if available."""
         return None  # pragma: no cover
 
-    def _set_http_client(self, http_client: httpx.AsyncClient) -> None:
+    @staticmethod
+    def realtime_model_profile(model_name: str) -> RealtimeModelProfile | None:
+        """The realtime model profile for the named model, if available."""
+        return None
+
+    def _set_http_client(self, http_client: AsyncHTTPClient) -> None:
         """Update the SDK client's internal HTTP client reference.
 
         Subclasses that manage their own HTTP client should override this to inject
@@ -113,36 +141,13 @@ class Provider(ABC, Generic[InterfaceClient]):
 
 def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
     """Infers the provider class from the provider name."""
-    came_from_gateway = provider.startswith('gateway/')
-    # Normalize gateway-prefixed providers (e.g. 'gateway/openai' -> 'openai').
-    # The `gateway/google-vertex` deprecation warning fires inside `normalize_gateway_provider`.
-    if came_from_gateway:
+    # Strip the `gateway/` prefix to get the canonical class-lookup name. The
+    # Gateway URL route value (e.g. `google-vertex`) is a separate concern
+    # handled by `_gateway_route` in `providers/gateway.py`.
+    if provider.startswith('gateway/'):
         from .gateway import normalize_gateway_provider
 
         provider = normalize_gateway_provider(provider)
-
-    # Normalize deprecated/alias provider names
-    if provider == 'vertexai':
-        provider = 'google-vertex'
-
-    if provider == 'google-gla':
-        warnings.warn(
-            "The 'google-gla:' prefix is deprecated and will be removed in v2.0. Use 'google:' instead.",
-            PydanticAIDeprecationWarning,
-            stacklevel=2,
-        )
-        provider = 'google'
-    elif provider == 'google-vertex':
-        # Suppress the standalone `'google-vertex:'` rename warning when coming from a gateway
-        # prefix — the caller already saw the `'gateway/google-vertex:'` warning above, and the
-        # internal mapping `gateway/google-cloud -> google-vertex` is intentional (see rule 17).
-        if not came_from_gateway:
-            warnings.warn(
-                "The 'google-vertex:' prefix is deprecated and will be removed in v2.0. Use 'google-cloud:' instead.",
-                PydanticAIDeprecationWarning,
-                stacklevel=2,
-            )
-        provider = 'google-cloud'
 
     if provider in ('openai', 'openai-chat', 'openai-responses'):
         from .openai import OpenAIProvider
@@ -160,7 +165,7 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
         from .vercel import VercelProvider
 
         return VercelProvider
-    elif provider == 'azure':
+    elif provider in ('azure', 'azure-responses'):
         from .azure import AzureProvider
 
         return AzureProvider
@@ -176,6 +181,10 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
         from .bedrock import BedrockProvider
 
         return BedrockProvider
+    elif provider == 'bedrock-mantle':
+        from .bedrock_mantle import BedrockMantleProvider
+
+        return BedrockMantleProvider
     elif provider == 'groq':
         from .groq import GroqProvider
 
@@ -196,10 +205,10 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
         from .cohere import CohereProvider
 
         return CohereProvider
-    elif provider == 'grok':
-        from .grok import GrokProvider  # pyright: ignore[reportDeprecated]
+    elif provider == 'crusoe':
+        from .crusoe import CrusoeProvider
 
-        return GrokProvider  # pyright: ignore[reportDeprecated]
+        return CrusoeProvider
     elif provider == 'xai':
         from .xai import XaiProvider
 
@@ -229,9 +238,9 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
 
         return OllamaProvider
     elif provider == 'github':
-        from .github import GitHubProvider
+        from .github import GitHubProvider  # pyright: ignore[reportDeprecated]
 
-        return GitHubProvider
+        return GitHubProvider  # pyright: ignore[reportDeprecated]
     elif provider == 'litellm':
         from .litellm import LiteLLMProvider
 
@@ -252,18 +261,22 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
         from .sambanova import SambaNovaProvider
 
         return SambaNovaProvider
-    elif provider == 'outlines':
-        from .outlines import OutlinesProvider  # pyright: ignore[reportDeprecated]
-
-        return OutlinesProvider  # pyright: ignore[reportDeprecated]
     elif provider == 'sentence-transformers':
         from .sentence_transformers import SentenceTransformersProvider
 
         return SentenceTransformersProvider
+    elif provider == 'snowflake':
+        from .snowflake import SnowflakeProvider
+
+        return SnowflakeProvider
     elif provider == 'voyageai':
         from .voyageai import VoyageAIProvider
 
         return VoyageAIProvider
+    elif provider == 'zai':
+        from .zai import ZaiProvider
+
+        return ZaiProvider
     elif provider == 'nscale':
         from .nscale import NscaleProvider
 
@@ -277,32 +290,8 @@ def infer_provider(provider: str) -> Provider[Any]:
     if provider.startswith('gateway/'):
         from .gateway import gateway_provider
 
-        # The `gateway/google-vertex` deprecation warning fires inside `normalize_gateway_provider`,
-        # which `gateway_provider` calls below.
         upstream_provider = provider.removeprefix('gateway/')
         return gateway_provider(upstream_provider)
-
-    if provider == 'vertexai':
-        provider = 'google-vertex'
-
-    if provider == 'google-gla':
-        warnings.warn(
-            "The 'google-gla:' prefix is deprecated and will be removed in v2.0. Use 'google:' instead.",
-            PydanticAIDeprecationWarning,
-            stacklevel=2,
-        )
-        from .google import GoogleProvider
-
-        return GoogleProvider()
-    elif provider == 'google-vertex':
-        warnings.warn(
-            "The 'google-vertex:' prefix is deprecated and will be removed in v2.0. Use 'google-cloud:' instead.",
-            PydanticAIDeprecationWarning,
-            stacklevel=2,
-        )
-        from .google_cloud import GoogleCloudProvider
-
-        return GoogleCloudProvider()
 
     provider_class = infer_provider_class(provider)
     return provider_class()

@@ -230,6 +230,70 @@ async def test_span_node_matches(span_tree: SpanTree):
     assert not child1_node.matches(SpanQuery(name_equals='child1', has_attributes={'type': 'normal'}))
 
 
+async def test_span_node_matches_json_serialized_attributes():
+    """Test that has_attributes matches dict and list values that are stored as JSON strings."""
+    with context_subtree() as tree:
+        with logfire.span(
+            'span',
+            dict_attr={'foo': 1, 'bar': {'baz': True}},
+            list_attr=[1, 2, 3],
+            str_attr='hello',
+            numeric_str='42',
+            bool_str='true',
+            deep_str='[' * 10000 + ']' * 10000,
+        ):
+            pass
+
+    assert isinstance(tree, SpanTree)
+    node = tree.roots[0]
+    # Logfire stores dict and list attribute values as JSON strings
+    assert isinstance(node.attributes['dict_attr'], str)
+    assert isinstance(node.attributes['list_attr'], str)
+
+    # Dict attribute queried as a dict
+    assert node.matches(SpanQuery(has_attributes={'dict_attr': {'foo': 1, 'bar': {'baz': True}}}))
+    assert not node.matches(SpanQuery(has_attributes={'dict_attr': {'foo': 1, 'bar': {'baz': False}}}))
+    assert not node.matches(SpanQuery(has_attributes={'dict_attr': {'wrong': 1}}))
+
+    # List attribute queried as a list
+    assert node.matches(SpanQuery(has_attributes={'list_attr': [1, 2, 3]}))
+    assert not node.matches(SpanQuery(has_attributes={'list_attr': [1, 2, 4]}))
+
+    # Combined with a plain string condition
+    assert node.matches(SpanQuery(has_attributes={'dict_attr': {'foo': 1, 'bar': {'baz': True}}, 'str_attr': 'hello'}))
+
+    # A stored string is not deserialized when the query value is a primitive:
+    # the string '42' must not match the int 42, nor 'true' the bool True
+    assert node.matches(SpanQuery(has_attributes={'numeric_str': '42'}))
+    assert not node.matches(SpanQuery(has_attributes={'numeric_str': 42}))
+    assert not node.matches(SpanQuery(has_attributes={'bool_str': True}))
+
+    # A stored string that isn't valid JSON doesn't match a dict query, and neither does a missing attribute
+    assert not node.matches(SpanQuery(has_attributes={'str_attr': {'key': 'val'}}))
+    assert not node.matches(SpanQuery(has_attributes={'missing': {'key': 'val'}}))
+
+    # A pathologically nested stored string doesn't crash matching
+    assert not node.matches(SpanQuery(has_attributes={'deep_str': [1]}))
+
+
+async def test_span_node_matches_native_sequence_attributes():
+    """Test that a list query value matches a sequence attribute stored natively as a tuple by the OTel SDK."""
+    from opentelemetry import trace as otel_trace
+
+    tracer = otel_trace.get_tracer(__name__)
+    with context_subtree() as tree:
+        with tracer.start_as_current_span('span', attributes={'seq_attr': [1, 2, 3]}):
+            pass
+
+    assert isinstance(tree, SpanTree)
+    node = tree.roots[0]
+    # The OTel SDK stores sequence attribute values as tuples
+    assert node.attributes['seq_attr'] == (1, 2, 3)
+
+    assert node.matches(SpanQuery(has_attributes={'seq_attr': [1, 2, 3]}))
+    assert not node.matches(SpanQuery(has_attributes={'seq_attr': [1, 2]}))
+
+
 async def test_span_tree_repr(span_tree: SpanTree):
     assert repr(SpanTree()) == snapshot('<SpanTree />')
     assert str(span_tree) == snapshot('<SpanTree num_roots=1 total_spans=6 />')
@@ -906,3 +970,57 @@ async def test_context_subtree_not_configured(mocker: MockerFixture):
         'refer to the documentation at '
         'https://ai.pydantic.dev/evals/#opentelemetry-integration.'
     )
+
+
+async def test_span_node_status_captured():
+    """`SpanNode.status` reflects the OTel span status (unset / ok / error)."""
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.trace import StatusCode
+
+    tracer = otel_trace.get_tracer(__name__)
+    with context_subtree() as tree:
+        with logfire.span('unset_span'):
+            pass
+        with tracer.start_as_current_span('ok_span') as ok_span:
+            ok_span.set_status(StatusCode.OK)
+        with pytest.raises(ValueError):
+            with logfire.span('error_span'):
+                raise ValueError('boom')
+
+    assert isinstance(tree, SpanTree)
+    statuses = {node.name: node.status for node in tree}
+    assert statuses == {'unset_span': 'unset', 'ok_span': 'ok', 'error_span': 'error'}
+
+
+async def test_span_query_has_status():
+    """The `has_status` SpanQuery condition filters spans by status."""
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.trace import StatusCode
+
+    tracer = otel_trace.get_tracer(__name__)
+    with context_subtree() as tree:
+        with logfire.span('parent'):
+            with logfire.span('unset_span'):
+                pass
+            with tracer.start_as_current_span('ok_span') as ok_span:
+                ok_span.set_status(StatusCode.OK)
+            with pytest.raises(ValueError):
+                with logfire.span('error_span'):
+                    raise ValueError('boom')
+
+    assert isinstance(tree, SpanTree)
+
+    assert [node.name for node in tree.find({'has_status': 'error'})] == ['error_span']
+    assert [node.name for node in tree.find({'has_status': 'ok'})] == ['ok_span']
+    assert [node.name for node in tree.find({'has_status': 'unset'})] == ['parent', 'unset_span']
+
+    # Composes with other conditions and logical operators
+    assert tree.any({'name_equals': 'error_span', 'has_status': 'error'})
+    assert not tree.any({'name_equals': 'unset_span', 'has_status': 'error'})
+    assert [node.name for node in tree.find({'not_': {'has_status': 'error'}})] == ['parent', 'unset_span', 'ok_span']
+
+    # Composes with related-span conditions
+    parent_node = tree.first({'name_equals': 'parent'})
+    assert parent_node is not None
+    assert parent_node.matches({'some_child_has': {'has_status': 'error'}})
+    assert not parent_node.matches({'no_child_has': {'has_status': 'error'}})

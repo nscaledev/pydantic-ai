@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from dataclasses import asdict
 from datetime import timezone
 
@@ -15,13 +15,20 @@ from pydantic_ai import (
     ModelResponse,
     ModelRetry,
     RunContext,
+    SpeechPart,
     SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
+from pydantic_ai.models.function import (
+    AgentInfo,
+    DeltaToolCall,
+    DeltaToolCalls,
+    FunctionModel,
+    _estimate_usage,  # pyright: ignore[reportPrivateUsage]
+)
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.result import RunUsage
 from pydantic_ai.usage import RequestUsage
@@ -119,6 +126,23 @@ def test_simple():
     )
 
 
+async def _sync_returning_coroutine_impl(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+    return ModelResponse(parts=[TextPart('coroutine awaited')])
+
+
+def sync_returning_coroutine(messages: list[ModelMessage], info: AgentInfo) -> Awaitable[ModelResponse]:
+    # A plain `def` that returns a coroutine: not detected by `iscoroutinefunction`, so it's run in the
+    # executor and its return value must still be awaited (via `await_maybe`) rather than asserted to be a
+    # `ModelResponse` directly.
+    return _sync_returning_coroutine_impl(messages, info)
+
+
+def test_sync_function_returning_coroutine():
+    agent = Agent(FunctionModel(sync_returning_coroutine))
+    result = agent.run_sync('Hello')
+    assert result.output == snapshot('coroutine awaited')
+
+
 async def weather_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:  # pragma: lax no cover
     assert info.allow_text_output
     assert {t.name for t in info.function_tools} == {'get_location', 'get_weather'}
@@ -148,7 +172,7 @@ async def weather_model(messages: list[ModelMessage], info: AgentInfo) -> ModelR
     raise ValueError(f'Unexpected message: {last}')
 
 
-weather_agent: Agent[None, str] = Agent(FunctionModel(weather_model))
+weather_agent = Agent(FunctionModel(weather_model))
 
 
 @weather_agent.tool_plain
@@ -161,7 +185,7 @@ async def get_location(location_description: str) -> str:
 
 
 @weather_agent.tool
-async def get_weather(_: RunContext[None], lat: int, lng: int):
+async def get_weather(_: RunContext, lat: int, lng: int):
     if (lat, lng) == (51, 0):
         # it always rains in London
         return 'Raining'
@@ -294,7 +318,7 @@ def test_deps_none():
     agent = Agent(FunctionModel(call_tool))
 
     @agent.tool
-    async def get_none(ctx: RunContext[None]):
+    async def get_none(ctx: RunContext):
         nonlocal called
 
         called = True
@@ -330,7 +354,9 @@ def test_model_arg():
     result = agent.run_sync('Hello', model=FunctionModel(return_last))
     assert result.output == snapshot("content='Hello' part_kind='user-prompt' message_count=1")
 
-    with pytest.raises(RuntimeError, match='`model` must either be set on the agent or included when calling it.'):
+    with pytest.raises(
+        RuntimeError, match=re.escape('`model` must either be set on the agent or included when calling it.')
+    ):
         agent.run_sync('Hello')
 
 
@@ -338,7 +364,7 @@ agent_all = Agent()
 
 
 @agent_all.tool
-async def foo(_: RunContext[None], x: int) -> str:
+async def foo(_: RunContext, x: int) -> str:
     return str(x + 1)
 
 
@@ -406,6 +432,7 @@ def test_call_all():
                 usage=RequestUsage(input_tokens=52, output_tokens=21),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
+                provider_name='test',
                 run_id=IsStr(),
                 conversation_id=IsStr(),
             ),
@@ -436,6 +463,7 @@ def test_call_all():
                 usage=RequestUsage(input_tokens=57, output_tokens=33),
                 model_name='test',
                 timestamp=IsNow(tz=timezone.utc),
+                provider_name='test',
                 run_id=IsStr(),
                 conversation_id=IsStr(),
             ),
@@ -518,6 +546,11 @@ async def test_stream_text():
             ]
         )
         assert result.usage == snapshot(RunUsage(requests=1, input_tokens=50, output_tokens=2))
+
+
+async def test_speech_response_estimates_transcript_tokens() -> None:
+    response = ModelResponse(parts=[SpeechPart(speaker='assistant', transcript='hello spoken world')])
+    assert _estimate_usage([response]) == RequestUsage(input_tokens=50, output_tokens=3)
 
 
 class Foo(BaseModel):

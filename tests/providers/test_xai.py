@@ -61,6 +61,13 @@ def test_xai_provider_forwards_api_host_and_timeout(captured_client_kwargs: list
     assert captured_client_kwargs == [{'api_key': 'api-key', 'api_host': 'gateway.x.ai', 'timeout': 30}]
 
 
+def test_xai_provider_forwards_metadata(captured_client_kwargs: list[dict[str, object]]) -> None:
+    provider = XaiProvider(api_key='api-key', metadata=(('x-grok-conv-id', 'test-conv-id'),))
+
+    assert provider.client is not None  # triggers lazy client creation
+    assert captured_client_kwargs == [{'api_key': 'api-key', 'metadata': (('x-grok-conv-id', 'test-conv-id'),)}]
+
+
 def test_xai_provider_omits_unset_client_kwargs(captured_client_kwargs: list[dict[str, object]]) -> None:
     provider = XaiProvider(api_key='api-key')
 
@@ -69,13 +76,22 @@ def test_xai_provider_omits_unset_client_kwargs(captured_client_kwargs: list[dic
 
 
 def test_xai_model_profile():
-    from pydantic_ai.profiles.grok import GrokModelProfile
-
     provider = XaiProvider(api_key='api-key')
     profile = provider.model_profile('grok-4.3')
-    assert isinstance(profile, GrokModelProfile)
-    assert profile.grok_supports_builtin_tools is True
-    assert profile.grok_reasoning_efforts == frozenset({'none', 'low', 'medium', 'high'})
+    assert isinstance(profile, dict)
+    assert profile.get('grok_supports_builtin_tools', False) is True
+    assert profile.get('grok_reasoning_efforts') == frozenset({'none', 'low', 'medium', 'high'})
+
+
+def test_xai_model_profile_grok_4_5():
+    provider = XaiProvider(api_key='api-key')
+    profile = provider.model_profile('grok-4.5')
+    assert isinstance(profile, dict)
+    assert profile.get('grok_supports_builtin_tools', False) is True
+    # Grok 4.5 rejects `reasoning_effort='none'`, so it always reasons.
+    assert profile.get('grok_reasoning_efforts') == frozenset({'low', 'medium', 'high'})
+    assert profile.get('supports_thinking', False) is True
+    assert profile.get('thinking_always_enabled', False) is True
 
 
 def test_xai_provider_recreates_client_on_new_loop():

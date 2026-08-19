@@ -44,6 +44,7 @@ Then running `clai` will start an interactive session where you can chat with th
 - `/markdown`: Show the last response in markdown format
 - `/multiline`: Toggle multiline input mode (use Ctrl+D to submit)
 - `/cp`: Copy the last response to clipboard
+- `/usage`: Show cumulative token usage for the session (turns, input, output, requests, tool calls); add `--json` for a single-line JSON object
 
 ### CLI Options
 
@@ -189,6 +190,7 @@ clai web --agent my_module:my_agent -i 'Always respond in Spanish'
 | `--host` | Host to bind server (default: 127.0.0.1) |
 | `--port` | Port to bind server (default: 7932) |
 | `--html-source` | URL or file path for the chat UI HTML. |
+| `--allowed-host` | Hostname to answer to in addition to IP addresses and `localhost` (repeatable). See [Reaching the UI under a hostname](web.md#reaching-the-ui-under-a-hostname). |
 
 When using `--agent`, the agent's configured model becomes the default. CLI models (`-m`) are additional options. Without `--agent`, the first `-m` model is the default.
 

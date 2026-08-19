@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from functools import cache
 from textwrap import indent
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import TypeAdapter
 from typing_extensions import TypedDict
@@ -18,8 +19,11 @@ if TYPE_CHECKING:  # pragma: no cover
 # Should match opentelemetry.util.types.AttributeValue
 AttributeValue = str | bool | int | float | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
 
+SpanStatus = Literal['unset', 'ok', 'error']
+"""The status of a span, mirroring `opentelemetry.trace.StatusCode`."""
 
-__all__ = 'SpanNode', 'SpanTree', 'SpanQuery'
+
+__all__ = 'SpanNode', 'SpanQuery', 'SpanStatus', 'SpanTree'
 
 
 class SpanQuery(TypedDict, total=False):
@@ -41,7 +45,13 @@ class SpanQuery(TypedDict, total=False):
 
     ## Attribute conditions
     has_attributes: dict[str, Any]
+    """Attribute values are compared with equality; a dict or list value also matches an attribute stored as its
+    JSON serialization, since OTel attributes cannot hold nested objects and instrumentation libraries like Logfire
+    store them as JSON strings. A list value also matches an attribute stored as a tuple."""
     has_attribute_keys: list[str]
+
+    ## Status conditions
+    has_status: SpanStatus
 
     ## Timing conditions
     min_duration: timedelta | float
@@ -89,10 +99,12 @@ class SpanNode:
     start_timestamp: datetime
     end_timestamp: datetime
     attributes: dict[str, AttributeValue]
+    status: SpanStatus = 'unset'
+    """The span's status; `'error'` if the operation the span represents raised an exception."""
 
     @property
     def duration(self) -> timedelta:
-        """Return the span's duration as a timedelta, or None if start/end not set."""
+        """Return the span's duration as a timedelta."""
         return self.end_timestamp - self.start_timestamp
 
     @property
@@ -129,6 +141,8 @@ class SpanNode:
         assert span.context is not None, 'Span has no context'
         assert span.start_time is not None, 'Span has no start time'
         assert span.end_time is not None, 'Span has no end time'
+        status_code_name = span.status.status_code.name  # 'UNSET' | 'OK' | 'ERROR'
+        status: SpanStatus = 'error' if status_code_name == 'ERROR' else 'ok' if status_code_name == 'OK' else 'unset'
         return SpanNode(
             name=span.name,
             trace_id=span.context.trace_id,
@@ -137,6 +151,7 @@ class SpanNode:
             start_timestamp=datetime.fromtimestamp(span.start_time / 1e9, tz=timezone.utc),
             end_timestamp=datetime.fromtimestamp(span.end_time / 1e9, tz=timezone.utc),
             attributes=dict(span.attributes or {}),
+            status=status,
         )
 
     def add_child(self, child: SpanNode) -> None:
@@ -241,6 +256,23 @@ class SpanNode:
 
         return self._matches_query(query)
 
+    def _attribute_matches(self, key: str, expected: Any) -> bool:
+        """Check if a span attribute matches an expected value, handling JSON-serialized dicts and lists."""
+        stored = self.attributes.get(key)
+        if stored == expected:
+            return True
+        # OTel attribute values can only be primitives or sequences thereof, so instrumentation
+        # libraries like Logfire store dict and list values as JSON strings.
+        if isinstance(expected, dict | list) and isinstance(stored, str):
+            try:
+                return json.loads(stored) == expected
+            except (json.JSONDecodeError, RecursionError):
+                return False
+        # The OTel SDK stores sequence attribute values as tuples
+        if isinstance(expected, list) and isinstance(stored, tuple):
+            return list(stored) == expected
+        return False
+
     def _matches_query(self, query: SpanQuery) -> bool:  # noqa: C901
         """Check if the span matches the query conditions."""
         # Logical combinations
@@ -267,12 +299,16 @@ class SpanNode:
 
         # Attribute conditions
         if (has_attributes := query.get('has_attributes')) and not all(
-            self.attributes.get(key) == value for key, value in has_attributes.items()
+            self._attribute_matches(key, value) for key, value in has_attributes.items()
         ):
             return False
         if (has_attributes_keys := query.get('has_attribute_keys')) and not all(
             key in self.attributes for key in has_attributes_keys
         ):
+            return False
+
+        # Status conditions
+        if (has_status := query.get('has_status')) and self.status != has_status:
             return False
 
         # Timing conditions

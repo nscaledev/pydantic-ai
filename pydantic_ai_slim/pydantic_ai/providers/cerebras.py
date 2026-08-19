@@ -3,28 +3,30 @@ from __future__ import annotations as _annotations
 import os
 from typing import overload
 
-import httpx
-
 from pydantic_ai import ModelProfile
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.models import create_async_http_client
+from pydantic_ai.profiles import merge_profile
 from pydantic_ai.profiles.harmony import harmony_model_profile
 from pydantic_ai.profiles.meta import meta_model_profile
 from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
 from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.profiles.zai import zai_model_profile
-from pydantic_ai.providers import Provider
 
 try:
     from openai import AsyncOpenAI
-except ImportError as _import_error:  # pragma: no cover
+except ImportError as _import_error:
     raise ImportError(
         'Please install the `openai` package to use the Cerebras provider, '
         'you can use the `cerebras` optional group — `pip install "pydantic-ai-slim[cerebras]"`'
     ) from _import_error
+else:
+    from ._openai_compatible import (
+        AsyncHTTPClient as _OpenAIHTTPClient,
+        OpenAICompatibleProvider as _OpenAICompatibleProvider,
+    )
 
 
-class CerebrasProvider(Provider[AsyncOpenAI]):
+class CerebrasProvider(_OpenAICompatibleProvider):
     """Provider for Cerebras API."""
 
     @property
@@ -70,11 +72,23 @@ class CerebrasProvider(Provider[AsyncOpenAI]):
             'openai_service_tier',
         )
         is_reasoning = model_name_lower.startswith(reasoning_prefixes)
-        return OpenAIModelProfile(
-            json_schema_transformer=OpenAIJsonSchemaTransformer,
-            openai_unsupported_model_settings=unsupported_model_settings,
-            supports_thinking=is_reasoning,
-        ).update(profile)
+        # gpt-oss reasons unconditionally on Cerebras: `disable_reasoning=True` is rejected with a 400,
+        # so `thinking=False` must be silently ignored rather than emitted. zai-glm-4.7 can still disable.
+        is_always_on_reasoning = model_name_lower.startswith('gpt-oss')
+        # GLM requires prior reasoning to be replayed inside `<think>...</think>` tags in the assistant
+        # message content, not in a separate `reasoning` field; gpt-oss follows Harmony rules and keeps `'auto'`.
+        # https://inference-docs.cerebras.ai/capabilities/reasoning
+        send_back_thinking_parts = 'tags' if model_name_lower.startswith('zai') else 'auto'
+        return merge_profile(
+            OpenAIModelProfile(json_schema_transformer=OpenAIJsonSchemaTransformer),
+            profile,
+            OpenAIModelProfile(
+                openai_unsupported_model_settings=unsupported_model_settings,
+                supports_thinking=is_reasoning,
+                thinking_always_enabled=is_always_on_reasoning,
+                openai_chat_send_back_thinking_parts=send_back_thinking_parts,
+            ),
+        )
 
     @overload
     def __init__(self) -> None: ...
@@ -83,10 +97,10 @@ class CerebrasProvider(Provider[AsyncOpenAI]):
     def __init__(self, *, api_key: str) -> None: ...
 
     @overload
-    def __init__(self, *, api_key: str, http_client: httpx.AsyncClient) -> None: ...
+    def __init__(self, *, api_key: str, http_client: _OpenAIHTTPClient) -> None: ...
 
     @overload
-    def __init__(self, *, http_client: httpx.AsyncClient) -> None: ...
+    def __init__(self, *, http_client: _OpenAIHTTPClient) -> None: ...
 
     @overload
     def __init__(self, *, openai_client: AsyncOpenAI | None = None) -> None: ...
@@ -96,7 +110,7 @@ class CerebrasProvider(Provider[AsyncOpenAI]):
         *,
         api_key: str | None = None,
         openai_client: AsyncOpenAI | None = None,
-        http_client: httpx.AsyncClient | None = None,
+        http_client: _OpenAIHTTPClient | None = None,
     ) -> None:
         """Create a new Cerebras provider.
 
@@ -104,7 +118,7 @@ class CerebrasProvider(Provider[AsyncOpenAI]):
             api_key: The API key to use for authentication, if not provided, the `CEREBRAS_API_KEY` environment variable
                 will be used if available.
             openai_client: An existing `AsyncOpenAI` client to use. If provided, `api_key` and `http_client` must be `None`.
-            http_client: An existing `httpx.AsyncClient` to use for making HTTP requests.
+            http_client: An existing `httpx2.AsyncClient` or legacy `httpx.AsyncClient` to use for making HTTP requests.
         """
         api_key = api_key or os.getenv('CEREBRAS_API_KEY')
         if not api_key and openai_client is None:
@@ -117,17 +131,7 @@ class CerebrasProvider(Provider[AsyncOpenAI]):
 
         if openai_client is not None:
             self._client = openai_client
-        elif http_client is not None:
-            self._client = AsyncOpenAI(
-                base_url=self.base_url, api_key=api_key, http_client=http_client, default_headers=default_headers
-            )
         else:
-            http_client = create_async_http_client()
-            self._own_http_client = http_client
-            self._http_client_factory = create_async_http_client
-            self._client = AsyncOpenAI(
+            self._client = self._create_openai_client(
                 base_url=self.base_url, api_key=api_key, http_client=http_client, default_headers=default_headers
             )
-
-    def _set_http_client(self, http_client: httpx.AsyncClient) -> None:
-        self._client._client = http_client  # pyright: ignore[reportPrivateUsage]
