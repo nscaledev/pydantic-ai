@@ -1,7 +1,6 @@
 from __future__ import annotations as _annotations
 
 import os
-from typing import overload
 
 import httpx
 
@@ -9,13 +8,12 @@ from pydantic_ai import ModelProfile
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import create_async_http_client
 from pydantic_ai.profiles.deepseek import deepseek_model_profile
-from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
-from pydantic_ai.profiles.openai import openai_model_profile
 from pydantic_ai.profiles.meta import meta_model_profile
-from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.profiles.mistral import mistral_model_profile
+from pydantic_ai.profiles.moonshotai import moonshotai_model_profile
+from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile, openai_model_profile
+from pydantic_ai.profiles.qwen import qwen_model_profile
 from pydantic_ai.providers import Provider
-from pydantic_ai.profiles.openai import OpenAIJsonSchemaTransformer, OpenAIModelProfile
 
 try:
     from openai import AsyncOpenAI
@@ -25,25 +23,13 @@ except ImportError as _import_error:  # pragma: no cover
         'you can use the `openai` optional group — `pip install "pydantic-ai-slim[openai]"`'
     ) from _import_error
 
+
 class NscaleProvider(Provider[AsyncOpenAI]):
     """Provider for NScale Models API.
 
     NScale Models provides access to various AI models through an OpenAI-compatible API.
     See <https://docs.nscale.com/docs/ai-services/models> for more information.
     """
-
-    @overload
-    def __init__(self) -> None: ...
-
-    @overload
-    def __init__(self, *, api_key: str) -> None: ...
-
-    @overload
-    def __init__(self, *, api_key: str, http_client: httpx.AsyncClient) -> None: ...
-
-    @overload
-    def __init__(self, *, openai_client: AsyncOpenAI | None = None) -> None: ...
-
 
     @property
     def name(self) -> str:
@@ -97,21 +83,16 @@ class NscaleProvider(Provider[AsyncOpenAI]):
             'DeepSeek-R1-Distill-Qwen-7B',
             'DeepSeek-R1-Distill-Qwen-14B',
         }
-        is_deepseek_r1_always_reasoning = provider == 'deepseek-ai' and model_name in deepseek_r1_always_reasoning_models
+        is_deepseek_r1_always_reasoning = (
+            provider == 'deepseek-ai' and model_name in deepseek_r1_always_reasoning_models
+        )
         is_kimi_reasoning = provider == 'moonshotai' and model_name == 'Kimi-K2.5'
         is_nvidia_reasoning = provider == 'nvidia'
         supports_thinking = (
-            is_gpt_oss
-            or is_qwen3_always_reasoning
-            or is_deepseek_r1
-            or is_kimi_reasoning
-            or is_nvidia_reasoning
+            is_gpt_oss or is_qwen3_always_reasoning or is_deepseek_r1 or is_kimi_reasoning or is_nvidia_reasoning
         )
         thinking_always_enabled = (
-            is_gpt_oss
-            or is_qwen3_always_reasoning
-            or is_deepseek_r1_always_reasoning
-            or is_nvidia_reasoning
+            is_gpt_oss or is_qwen3_always_reasoning or is_deepseek_r1_always_reasoning or is_nvidia_reasoning
         )
 
         for prefix, profile_func in provider_to_profile.items():
@@ -143,30 +124,18 @@ class NscaleProvider(Provider[AsyncOpenAI]):
                 openai_supports_tool_choice_required=False,
                 supports_thinking=supports_thinking,
                 thinking_always_enabled=thinking_always_enabled,
-            )                    
+            )
 
         return nscale_profile.update(profile)
-    
 
     def __init__(
         self,
-        base_url: str | None =None,
+        base_url: str | None = None,
         service_token: str | None = None,
         openai_client: AsyncOpenAI | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        """Initialize Nscale provider.
-            Args:
-
-        Args:
-            service_token: Scale service Token. If not provided, reads from NSCALE_SERVICE_TOKEN env var.
-            base_url: Custom API base URL. Defaults to https://inference.api.nscale.com/v1
-            openai_client: Optional pre-configured OpenAI client
-            http_client: Optional custom httpx.AsyncClient for making HTTP requests
-
-        Raises:
-            UserError: If API key is not provided and NSCALE_SERVICE_TOKEN env var is not set
-        """
+        """Initialize the Nscale provider."""
         if openai_client is not None:
             self._client = openai_client
             self._base_url = str(openai_client.base_url)
