@@ -106,6 +106,7 @@ class NscaleProvider(_OpenAICompatibleProvider):
         if provider == 'zai-org':
             nscale_profile = OpenAIModelProfile(
                 json_schema_transformer=OpenAIJsonSchemaTransformer,
+                openai_supports_tool_choice_required=False,
                 supports_thinking=True,
                 thinking_always_enabled=False,
                 openai_chat_thinking_field='reasoning_content',
