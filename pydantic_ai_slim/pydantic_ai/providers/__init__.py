@@ -277,6 +277,10 @@ def infer_provider_class(provider: str) -> type[Provider[Any]]:  # noqa: C901
         from .zai import ZaiProvider
 
         return ZaiProvider
+    elif provider == 'nscale':
+        from .nscale import NscaleProvider
+
+        return NscaleProvider
     else:
         raise ValueError(f'Unknown provider: {provider}')
 
